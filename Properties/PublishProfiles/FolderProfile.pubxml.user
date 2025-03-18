@@ -1,0 +1,11 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<!--
+https://go.microsoft.com/fwlink/?LinkID=208121.
+-->
+<Project>
+  <PropertyGroup>
+    <_PublishTargetUrl>C:\Users\Aaron\source\repos\JWTAuthentication\bin\Release\net6.0\publish\</_PublishTargetUrl>
+    <History>True|2025-03-09T15:34:01.6963090Z||;True|2025-01-13T12:53:29.4267448-06:00||;True|2025-01-13T12:49:58.1262376-06:00||;True|2025-01-13T12:45:18.8318947-06:00||;True|2025-01-13T12:33:54.7906793-06:00||;True|2025-01-13T12:23:32.3177892-06:00||;True|2024-06-16T03:10:26.1971002-05:00||;True|2024-06-16T03:04:04.9354301-05:00||;True|2024-06-16T03:03:23.6243523-05:00||;True|2024-06-16T03:00:30.6444833-05:00||;True|2024-06-16T02:52:02.5731679-05:00||;True|2024-06-16T02:50:44.1731851-05:00||;True|2024-06-16T02:38:24.1385286-05:00||;True|2024-06-16T02:37:34.0207946-05:00||;</History>
+    <LastFailureDetails />
+  </PropertyGroup>
+</Project>
