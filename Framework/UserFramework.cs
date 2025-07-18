@@ -17,6 +17,23 @@ namespace JWTAuthentication.Framework
         }
 
 
+        public UserDTO getUserDTOByID(int id)
+        {
+            var user = _context.Users
+              .Include(u => u.JobTitles)
+              .Include(u => u.Role)
+              .SingleOrDefault(u => u.Id == id);
+
+            if (user == null)
+            {
+                return null;
+            }
+            user.Salt = "";
+            user.Password = "";
+            user.RefreshToken = "";
+            return user;
+        }
+
         public UserInfo getUserInfo(string userName)
         {
             var user = _context.Users
@@ -84,7 +101,7 @@ namespace JWTAuthentication.Framework
                 PositionType = user.PayInformation?.PositionType,
                 Address = user.CurrentAddress?.Street != null ? $"{user.CurrentAddress.Street}, {user.CurrentAddress.City} {user.CurrentAddress.State}, {user.CurrentAddress.PostalCode}" : "No address",
                 EmergencyContacts = emergencyContacts,
-                TestResults = user.TestResults.IsNullOrEmpty() ? new() : user.TestResults.Select(tr => new TestResult
+                TestResults = user.TestResults.Equals(null) ? new() : user.TestResults.Select(tr => new TestResult
                 {
                     Id = tr.Id,
                     UserId = tr.UserId,
@@ -93,7 +110,7 @@ namespace JWTAuthentication.Framework
                     Status = tr.Status,
                     DateTaken = tr.DateTaken
                 }).ToList(),
-                Incidents = user.Incidents.IsNullOrEmpty() ? new() : user.Incidents.Select(i => new Incident
+                Incidents = user.Incidents.Equals(null) ? new() : user.Incidents.Select(i => new Incident
                 {
                     Id = i.Id,
                     UserId = i.UserId,
@@ -101,9 +118,9 @@ namespace JWTAuthentication.Framework
                     Details = i.Details,
                     DateOccurred = i.DateOccurred,
                     ReportedBy = i.ReportedBy,
-                    ReportedByUser = new UserDTO() { FirstName = user.FirstName, LastName = user.LastName, PreferredName = user.PreferredName, JobTitles = user.JobTitles, UserName = user.UserName}
+                    ReportedByUser = getUserDTOByID(i.ReportedBy)
                 }).ToList(),
-                Observations = user.Observations.IsNullOrEmpty() ? new() : user.Observations.Select(o => new Observation
+                Observations = user.Observations.Equals(null) ? new() : user.Observations.Select(o => new Observation
                 {
                     Id = o.Id,
                     UserId = o.UserId,

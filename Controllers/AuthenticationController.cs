@@ -2,6 +2,8 @@
 using JWTAuthentication.Framework.Database;
 using JWTAuthentication.Framework.Interfaces;
 using JWTAuthentication.Framework.Models;
+using MaxMind.GeoIP2;
+using MaxMind.GeoIP2.Exceptions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.Mvc;
@@ -12,7 +14,6 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Net;
 using System.Security.Claims;
 using System.Text;
-
 // For more information on enabling Web API for empty projects, visit https://go.microsoft.com/fwlink/?LinkID=397860
 
 namespace JWTAuthentication.Controllers
@@ -33,8 +34,8 @@ namespace JWTAuthentication.Controllers
         private readonly IUserRepository _userRepository;
         private readonly ITokenService _tokenService;
         private readonly ApplicationDbContext _context;
+        private readonly IFailedLoginRepository _failedLoginRepository;
         private readonly PermissionService _permissionService;
-
         private readonly SHA_Manager sha = new();
 
         public TokenInfo ReadTokenInfo(string authorization)
@@ -67,13 +68,14 @@ namespace JWTAuthentication.Controllers
             return result;
         }
 
-        public AuthenticationController(IConfiguration config, ITokenService tokenService, IUserRepository userRepository, ApplicationDbContext context, PermissionService permissionService)
+        public AuthenticationController(IConfiguration config, ITokenService tokenService, IUserRepository userRepository, ApplicationDbContext context, PermissionService permissionService, IFailedLoginRepository failedLoginRepository)
         {
             _config = config;
             _tokenService = tokenService;
             _userRepository = userRepository;
             _context = context;
             _permissionService = permissionService;
+            _failedLoginRepository = failedLoginRepository;
         }
 
         private UserDTO GetUser(UserModel userModel)
@@ -82,16 +84,91 @@ namespace JWTAuthentication.Controllers
             return _userRepository.GetUser(userModel);
         }
 
+        private async Task addFailedLoginAsync(IPAddress IP, string UserName)
+        {
+            try
+            {
+                using (var client = new WebServiceClient(int.Parse(_config["GEO_IP_ACC_ID"]), _config["GEO_IP_License"], host: "geolite.info"))
+                {
+                    // You can also use `client.CityAsync` or `client.InsightsAsync`
+                    // `client.InsightsAsync` is not available to GeoLite users
+                    var response = await client.CityAsync(IP);
+
+                    await _failedLoginRepository.InsertAttempt(new FailedLoginAttempt
+                    {
+                        IPAddress = IP.ToString(),
+                        CountryCode = response.Country.IsoCode,
+                        Region = response.Postal.Code,
+                        City = response.City.Name,
+                        AttemptTime = DateTime.UtcNow,
+                        UsernameAttempted = UserName
+                    });
+                }
+            } catch (AddressNotFoundException e)
+            {
+                using (HttpClient http = new HttpClient())
+                {
+                    string sIPAddress = await http.GetStringAsync("https://api.ipify.org");
+                    using (var client = new WebServiceClient(int.Parse(_config["GEO_IP_ACC_ID"]), _config["GEO_IP_License"], host: "geolite.info"))
+                    {
+                        // You can also use `client.CityAsync` or `client.InsightsAsync`
+                        // `client.InsightsAsync` is not available to GeoLite users
+                        var response = await client.CityAsync(sIPAddress);
+
+                        await _failedLoginRepository.InsertAttempt(new FailedLoginAttempt
+                        {
+                            IPAddress = sIPAddress,
+                            CountryCode = response.Country.IsoCode,
+                            Region = response.Postal.Code,
+                            City = response.City.Name,
+                            AttemptTime = DateTime.UtcNow,
+                            UsernameAttempted = UserName
+                        });
+                    }
+                }
+
+            }
+        }
+
         // GET api/<AuthenticationController>/5
         [HttpPost("GetToken")]
-        public IActionResult Post(UserModel userModel)
+        public async Task<IActionResult> PostAsync(UserModel userModel)
         {
+            /*
+             GET IP // CHECK DB
+             */
+
+            var IP = Request.HttpContext.Connection.RemoteIpAddress;
+            if (IP == null)
+            {
+                return StatusCode(429, "Failed IP");
+            }
+
+            if (IP.ToString().StartsWith("192.168") || IP.ToString().Equals("127.0.0.1"))
+            {
+                using (HttpClient http = new HttpClient())
+                {
+                    string sIPAddress = await http.GetStringAsync("https://api.ipify.org");
+                    IP = IPAddress.Parse(sIPAddress);
+                }
+            }
+
+            var attempts = await _failedLoginRepository.GetAttempts(IP.ToString(), TimeSpan.FromMinutes(30));
+            Debug.Print($"{attempts.Count} attempts; found");
+            if (attempts.Count >= 5)
+            {
+                Debug.Print($"failed attempts...");
+                return StatusCode(429, "Too many failed login attempts. Try again later.");
+            }
             var validUser = GetUser(userModel);
             if (validUser == null)
-                return BadRequest();
+            {
+                await addFailedLoginAsync(IP, userModel.UserName);
+                return Unauthorized("Invalid Password, or Username Provided!\nThis attempt has been logged.");
+            }
             if (validUser.DeletedTime != null)
             {
-                return Unauthorized("User account is terminated, please contact the system administrator.");
+                return Unauthorized("User account is terminated!\nPlease contact the system administrator.");
             }
             var generatedToken = _tokenService.BuildToken(_config["Jwt:Key"], _config["Jwt:Issuer"], validUser);
             if (generatedToken != null)
@@ -106,7 +183,8 @@ namespace JWTAuthentication.Controllers
                     RefreshToken = validUser.RefreshToken
                 });
             }
-            return Unauthorized();
+            await addFailedLoginAsync(IP, userModel.UserName);
+            return Unauthorized("Invalid Password, or Username Provided!\nThis attempt has been logged.");
         }
 
         [HttpPost("RefreshToken")]
@@ -272,7 +350,7 @@ namespace JWTAuthentication.Controllers
 
             var user = ReadTokenInfo(authorization).Name;
 
-            if (user.IsNullOrEmpty())
+            if (user.Equals(null))
             {
                 System.Diagnostics.Debug.WriteLine("No user name.");
                 return Unauthorized();

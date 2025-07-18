@@ -26,8 +26,10 @@ builder.Services.AddCors((options) =>
 });
 builder.Services.AddTransient<IUserRepository, UserRepository>();
 builder.Services.AddTransient<ITokenService, TokenService>();
+builder.Services.AddTransient<EmailService>();
 builder.Services.AddTransient<PermissionService>();
 builder.Services.AddTransient<IUserPermissionRepository, UserPermissionRepository>();
+builder.Services.AddScoped<IFailedLoginRepository, FailedLoginRepository>();
 
 
 IConfiguration Configuration = builder.Configuration;

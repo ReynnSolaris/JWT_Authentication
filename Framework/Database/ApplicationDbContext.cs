@@ -22,6 +22,7 @@ namespace JWTAuthentication.Framework.Database
         public DbSet<Observation> Observations { get; set; }
         public DbSet<Test> Tests { get; set; }
         public DbSet<TestResult> TestResults { get; set; }
+        public DbSet<FailedLoginAttempt> FailedLoginAttempts { get; set; }
         public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options) : base(options)
         {
         }
